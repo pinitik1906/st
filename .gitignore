@@ -1,5 +1,5 @@
 patches/
-.gitignore
-*.o
 st
+*.o
 *.orig
+*.rej

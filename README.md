@@ -3,9 +3,9 @@
 ## dependencies
 (if it does not build, you might need to install the `*-devel` packages also)
 
-+ `fontconfig`
 + `libX11`
 + `libXft`
++ `fontconfig`
 + `harfbuzz`
 
 ## patches
