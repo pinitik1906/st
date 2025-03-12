@@ -20,3 +20,12 @@
 + gruvbox
 + xresources
 + bold is not bright
+
+## install
+to install my st, type
+
+```
+git clone --depth 1 https://github.com/pinitik1906/st.git $HOME/stuffs/git/st
+cd $HOME/stuffs/git/st
+sudo make clean install
+```
