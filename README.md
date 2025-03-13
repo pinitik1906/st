@@ -25,3 +25,6 @@ git clone --depth 1 https://github.com/pinitik1906/st.git $HOME/stuffs/git/st
 cd $HOME/stuffs/git/st
 sudo make clean install
 ```
+
+## configure
+to configure my st build, please only configure in `config.h`
