@@ -1,4 +1,4 @@
-/* See LICENSE file for copyright and license details. */
+/* see LICENSE file for copyright and license details. */
 
 /*
  * appearance
@@ -11,7 +11,7 @@ static char *font2[] = { "NotoColorEmoji:size=9:antialias=true:autohint=true" };
 static int borderpx = 0;
 
 /*
- * What program is execed by st depends of these precedence rules:
+ * what program is execed by st depends of these precedence rules:
  * 1: program passed with -e
  * 2: scroll and/or utmp
  * 3: SHELL environment variable
@@ -20,6 +20,7 @@ static int borderpx = 0;
  */
 static char *shell = "/bin/sh";
 char *utmp = NULL;
+
 /* scroll program: to enable use a string like "scroll" */
 char *scroll = NULL;
 char *stty_args = "stty raw pass8 nl -echo -iexten -cstopb 38400";
@@ -27,14 +28,14 @@ char *stty_args = "stty raw pass8 nl -echo -iexten -cstopb 38400";
 /* identification sequence returned in DA and DECID */
 char *vtiden = "\033[?6c";
 
-/* Kerning / character bounding-box multipliers */
+/* kerning / character bounding-box multipliers */
 static float cwscale = 1.0;
 static float chscale = 1.0;
 
 /*
  * word delimiter string
  *
- * More advanced example: L" `'\"()[]{}"
+ * more advanced example: L" `'\"()[]{}"
  */
 wchar_t *worddelimiters = L" ";
 
@@ -72,7 +73,7 @@ static unsigned int cursorthickness = 2;
 /*
  * 1: render most of the lines/blocks characters without using the font for
  *    perfect alignment between cells (U2500 - U259F except dashes/diagonals).
- *    Bold affects lines thickness if boxdraw_bold is not 0. Italic is ignored.
+ *    bold affects lines thickness if boxdraw_bold is not 0. italic is ignored.
  * 0: disable (render all U25XX glyphs normally from the font).
  */
 const int boxdraw = 1;
@@ -82,7 +83,7 @@ const int boxdraw_bold = 0;
 const int boxdraw_braille = 0;
 
 /*
- * bell volume. It must be a value between -100 and 100. Use 0 for disabling
+ * bell volume. it must be a value between -100 and 100. use 0 for disabling
  * it
  */
 static int bellvolume = 0;
@@ -93,22 +94,23 @@ char *termname = "st-256color";
 /*
  * spaces per tab
  *
- * When you are changing this value, don't forget to adapt the »it« value in
+ * when you are changing this value, don't forget to adapt the »it« value in
  * the st.info and appropriately install the st.info in the environment where
  * you use this st version.
  *
  *	it#$tabspaces,
  *
- * Secondly make sure your kernel is not expanding tabs. When running `stty
- * -a` »tab0« should appear. You can tell the terminal to not expand tabs by
+ * secondly make sure your kernel is not expanding tabs. when running `stty
+ * -a` »tab0« should appear. you can tell the terminal to not expand tabs by
  *  running following command:
  *
  *	stty tabs
  */
 unsigned int tabspaces = 8;
 
-/* Terminal colors (16 first used in escape sequence) */
+/* terminal colors (16 first used in escape sequence) */
 static const char *colorname[] = {
+
 	/* 8 normal colors */
 	[0] = "#282828", /* black   */
 	[1] = "#cc241d", /* red     */
@@ -132,7 +134,7 @@ static const char *colorname[] = {
 
 
 /*
- * Default colors (colorname index)
+ * default colors (colorname index)
  * foreground, background, cursor, reverse cursor
  */
 unsigned int defaultfg = 15;
@@ -141,7 +143,7 @@ unsigned int defaultcs = 7;
 static unsigned int defaultrcs = 257;
 
 /*
- * Default shape of cursor
+ * default shape of cursor
  * 2: Block ("█")
  * 4: Underline ("_")
  * 6: Bar ("|")
@@ -150,35 +152,35 @@ static unsigned int defaultrcs = 257;
 static unsigned int cursorshape = 2;
 
 /*
- * Default columns and rows numbers
+ * default columns and rows numbers
  */
 
 static unsigned int cols = 80;
 static unsigned int rows = 24;
 
 /*
- * Default colour and shape of the mouse cursor
+ * default colour and shape of the mouse cursor
  */
 static unsigned int mouseshape = XC_xterm;
 static unsigned int mousefg = 7;
 static unsigned int mousebg = 0;
 
 /*
- * Color used to display font attributes when fontconfig selected a font which
+ * color used to display font attributes when fontconfig selected a font which
  * doesn't match the ones requested.
  */
 static unsigned int defaultattr = 11;
 
 /*
- * Force mouse select/shortcuts while mask is active (when MODE_MOUSE is set).
- * Note that if you want to use ShiftMask with selmasks, set this to an other
+ * force mouse select/shortcuts while mask is active (when MODE_MOUSE is set).
+ * note that if you want to use ShiftMask with selmasks, set this to an other
  * modifier, set to 0 to not use it.
  */
 static uint forcemousemod = ShiftMask;
 
 /*
- * Internal mouse shortcuts.
- * Beware that overloading Button1 will disable the selection.
+ * internal mouse shortcuts.
+ * beware that overloading Button1 will disable the selection.
  */
 static MouseShortcut mshortcuts[] = {
 	/* mask                 button   function        argument       	release */
@@ -191,7 +193,7 @@ static MouseShortcut mshortcuts[] = {
 	{ XK_ANY_MOD,           Button5, ttysend,        {.s = "\005"} },
 };
 
-/* Internal keyboard shortcuts. */
+/* internal keyboard shortcuts. */
 #define MODKEY Mod1Mask
 #define TERMMOD (ControlMask|ShiftMask)
 
@@ -214,11 +216,11 @@ static Shortcut shortcuts[] = {
 };
 
 /*
- * Special keys (change & recompile st.info accordingly)
+ * special keys (change & recompile st.info accordingly)
  *
- * Mask value:
- * * Use XK_ANY_MOD to match the key no matter modifiers state
- * * Use XK_NO_MOD to match the key alone (no modifiers)
+ * mask value:
+ * * use XK_ANY_MOD to match the key no matter modifiers state
+ * * use XK_NO_MOD to match the key alone (no modifiers)
  * appkey value:
  * * 0: no value
  * * > 0: keypad application mode enabled
@@ -229,26 +231,26 @@ static Shortcut shortcuts[] = {
  * * > 0: cursor application mode enabled
  * * < 0: cursor application mode disabled
  *
- * Be careful with the order of the definitions because st searches in
+ * be careful with the order of the definitions because st searches in
  * this table sequentially, so any XK_ANY_MOD must be in the last
  * position for a key.
  */
 
 /*
- * If you want keys other than the X11 function keys (0xFD00 - 0xFFFF)
+ * if you want keys other than the X11 function keys (0xFD00 - 0xFFFF)
  * to be mapped below, add them to this array.
  */
 static KeySym mappedkeys[] = { -1 };
 
 /*
- * State bits to ignore when matching key or button events.  By default,
+ * state bits to ignore when matching key or button events. by default,
  * numlock (Mod2Mask) and keyboard layout (XK_SWITCH_MOD) are ignored.
  */
 static uint ignoremod = Mod2Mask|XK_SWITCH_MOD;
 
 /*
- * This is the huge key array which defines all compatibility to the Linux
- * world. Please decide about changes wisely.
+ * this is the huge key array which defines all compatibility to the Linux
+ * world. please decide about changes wisely.
  */
 static Key key[] = {
 	/* keysym           mask            string      appkey appcursor */
@@ -464,11 +466,11 @@ static Key key[] = {
 };
 
 /*
- * Selection types' masks.
- * Use the same masks as usual.
+ * selection types' masks.
+ * use the same masks as usual.
  * Button1Mask is always unset, to make masks match between ButtonPress.
  * ButtonRelease and MotionNotify.
- * If no match is found, regular selection is used.
+ * if no match is found, regular selection is used.
  */
 static uint selmasks[] = {
 	[SEL_RECTANGULAR] = Mod1Mask,
