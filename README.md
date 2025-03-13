@@ -1,4 +1,4 @@
-**st v0.85**
+**st v0.92**
 
 ## dependencies
 (if it does not build, you might need to install the `*-devel` packages also)
@@ -9,17 +9,13 @@
 + `harfbuzz`
 
 ## patches
-(most of these patches are from Luke Smith's)
 
-+ alpha
-+ boxdraw
-+ ligatures
-+ scrollback
-+ resize-font
-+ font2
-+ gruvbox
-+ xresources
 + bold is not bright
++ boxdraw
++ clipboard
++ font2
++ gruvbox-dark
++ scrollback w/ mouse
 
 ## install
 to install my st, type
