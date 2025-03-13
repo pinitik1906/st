@@ -6,7 +6,6 @@
 + `libX11`
 + `libXft`
 + `fontconfig`
-+ `harfbuzz`
 
 ## patches
 
