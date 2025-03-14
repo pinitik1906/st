@@ -26,4 +26,4 @@ sudo make clean install
 ```
 
 ## configure
-to configure my st build, please only configure in `config.h`
+to edit my st build, please only configure in `config.h`
