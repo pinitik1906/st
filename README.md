@@ -6,6 +6,8 @@
 + `libX11`
 + `libXft`
 + `fontconfig`
++ `freetype`
++ `pkg-config`
 
 ## patches
 
