@@ -13,6 +13,7 @@
 
 + bold is not bright
 + boxdraw
++ charoffsets
 + clipboard
 + dynamic cursor color
 + font2
