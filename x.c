@@ -253,6 +253,7 @@ static char *opt_io    = NULL;
 static char *opt_line  = NULL;
 static char *opt_name  = NULL;
 static char *opt_title = NULL;
+static char *opt_dir   = NULL;
 
 static uint buttons; /* bit field of pressed buttons */
 
@@ -961,7 +962,6 @@ xloadfont(Font *f, FcPattern *pattern)
 	    XftResultMatch)) {
 		if ((XftPatternGetInteger(f->match->pattern, "weight", 0,
 		    &haveattr) != XftResultMatch) || haveattr != wantattr) {
-			f->badweight = 1;
 			fputs("font weight does not match\n", stderr);
 		}
 	}
@@ -1629,6 +1629,7 @@ void
 xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 {
 	Color drawcol;
+	XRenderColor colbg;
 
 	/* remove the old cursor */
 	if (selected(ox, oy))
@@ -1657,11 +1658,21 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
 		if (selected(cx, cy)) {
 			g.fg = defaultfg;
 			g.bg = defaultrcs;
-		} else {
-			g.fg = defaultbg;
-			g.bg = defaultcs;
+		} else if (!(og.mode & ATTR_REVERSE)) {
+			unsigned long col = g.bg;
+			g.bg = g.fg;
+			g.fg = col;
 		}
-		drawcol = dc.col[g.bg];
+
+		if (IS_TRUECOL(g.bg)) {
+			colbg.alpha = 0xffff;
+			colbg.red = TRUERED(g.bg);
+			colbg.green = TRUEGREEN(g.bg);
+			colbg.blue = TRUEBLUE(g.bg);
+			XftColorAllocValue(xw.dpy, xw.vis, xw.cmap, &colbg, &drawcol);
+		} else {
+			drawcol = dc.col[g.bg];
+		}
 	}
 
 	/* draw the new one */
@@ -2132,12 +2143,12 @@ run(void)
 void
 usage(void)
 {
-	die("usage: %s [-aiv] [-c class] [-f font] [-g geometry]"
-	    " [-n name] [-o file]\n"
+	die("usage: %s [-aiv] [-c class] [-d path] [-f font]"
+	    " [-g geometry] [-n name] [-o file]\n"
 	    "          [-T title] [-t title] [-w windowid]"
 	    " [[-e] command [args ...]]\n"
-	    "       %s [-aiv] [-c class] [-f font] [-g geometry]"
-	    " [-n name] [-o file]\n"
+	    "       %s [-aiv] [-c class] [-d path] [-f font]"
+	    " [-g geometry] [-n name] [-o file]\n"
 	    "          [-T title] [-t title] [-w windowid] -l line"
 	    " [stty_args ...]\n", argv0, argv0);
 }
@@ -2189,6 +2200,9 @@ main(int argc, char *argv[])
 	case 'v':
 		die("%s " VERSION "\n", argv0);
 		break;
+	case 'd':
+		opt_dir = EARGF(usage());
+		break;
 	default:
 		usage();
 	} ARGEND;
@@ -2208,6 +2222,7 @@ run:
 	xinit(cols, rows);
 	xsetenv();
 	selinit();
+	chdir(opt_dir);
 	run();
 
 	return 0;

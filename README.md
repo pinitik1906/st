@@ -14,9 +14,13 @@
 + bold is not bright
 + boxdraw
 + clipboard
++ dynamic cursor color
 + font2
 + gruvbox-dark
++ nano shortcuts support
++ nobadweight
 + scrollback w/ mouse
++ workingdir
 
 ## install
 to install my st, type
