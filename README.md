@@ -20,10 +20,10 @@
 + dynamic cursor color
 + font2
 + glyph wide support (on top of boxdraw)
-+ gruvbox-dark
++ gruvbox
 + nano shortcuts support
 + nobadweight
-+ scrollback w/ mouse
++ scrollback (w/ mouse patch)
 + workingdir
 
 ## install
