@@ -94,6 +94,12 @@ typedef struct {
 	Drawable buf;
 	GlyphFontSpec *specbuf; /* font spec buffer used for rendering */
 	Atom xembed, wmdeletewin, netwmname, netwmiconname, netwmpid;
+	Atom XdndTypeList, XdndSelection, XdndEnter, XdndPosition, XdndStatus,
+	     XdndLeave, XdndDrop, XdndFinished, XdndActionCopy, XdndActionMove,
+	     XdndActionLink, XdndActionAsk, XdndActionPrivate, XtextUriList,
+	     XtextPlain, XdndAware;
+	int64_t XdndSourceWin, XdndSourceVersion;
+	int32_t XdndSourceFormat;
 	struct {
 		XIM xim;
 		XIC xic;
@@ -142,7 +148,7 @@ typedef struct {
 
 static inline ushort sixd_to_16bit(int);
 static int xmakeglyphfontspecs(XftGlyphFontSpec *, const Glyph *, int, int, int);
-static void xdrawglyphfontspecs(const XftGlyphFontSpec *, Glyph, int, int, int);
+static void xdrawglyphfontspecs(const XftGlyphFontSpec *, Glyph, int, int, int, int);
 static void xdrawglyph(Glyph, int, int);
 static void xclear(int, int, int, int);
 static int xgeommasktogravity(int);
@@ -171,6 +177,9 @@ static void visibility(XEvent *);
 static void unmap(XEvent *);
 static void kpress(XEvent *);
 static void cmessage(XEvent *);
+static void xdndenter(XEvent *);
+static void xdndpos(XEvent *);
+static void xdnddrop(XEvent *);
 static void resize(XEvent *);
 static void focus(XEvent *);
 static uint buttonmask(uint);
@@ -180,6 +189,8 @@ static void bpress(XEvent *);
 static void bmotion(XEvent *);
 static void propnotify(XEvent *);
 static void selnotify(XEvent *);
+static void xdndsel(XEvent *);
+static void xdndpastedata(char *);
 static void selclear_(XEvent *);
 static void selrequest(XEvent *);
 static void setsel(char *, Time);
@@ -222,6 +233,7 @@ static DC dc;
 static XWindow xw;
 static XSelection xsel;
 static TermWindow win;
+const char XdndVersion = 5;
 
 /* Font Ring Cache */
 enum {
@@ -540,6 +552,11 @@ selnotify(XEvent *e)
 	if (property == None)
 		return;
 
+	if (property == xw.XdndSelection) {
+		xdndsel(e);
+		return;
+	}
+
 	do {
 		if (XGetWindowProperty(xw.dpy, xw.win, property, ofs,
 					BUFSIZ/4, False, AnyPropertyType,
@@ -606,6 +623,95 @@ selnotify(XEvent *e)
 	 * next data chunk in the property.
 	 */
 	XDeleteProperty(xw.dpy, xw.win, (int)property);
+}
+
+void
+xdndsel(XEvent *e)
+{
+	char* data;
+	unsigned long result;
+
+	Atom actualType;
+	int32_t actualFormat;
+	unsigned long bytesAfter;
+	XEvent reply = { ClientMessage };
+
+	reply.xclient.window = xw.XdndSourceWin;
+	reply.xclient.format = 32;
+	reply.xclient.data.l[0] = (long) xw.win;
+	reply.xclient.data.l[2] = 0;
+	reply.xclient.data.l[3] = 0;
+
+	XGetWindowProperty((Display*) xw.dpy, e->xselection.requestor,
+			e->xselection.property, 0, LONG_MAX, False,
+			e->xselection.target, &actualType, &actualFormat, &result,
+			&bytesAfter, (unsigned char**) &data);
+
+	if (result == 0)
+		return;
+
+	if (data) {
+		xdndpastedata(data);
+		XFree(data);
+	}
+
+	if (xw.XdndSourceVersion >= 2) {
+		reply.xclient.message_type = xw.XdndFinished;
+		reply.xclient.data.l[1] = result;
+		reply.xclient.data.l[2] = xw.XdndActionCopy;
+
+		XSendEvent((Display*) xw.dpy, xw.XdndSourceWin, False, NoEventMask,
+			 	&reply);
+		XFlush((Display*) xw.dpy);
+	}
+}
+
+int
+xdndurldecode(char *src, char *dest)
+{
+	char c;
+	int i = 0;
+
+	while (*src) {
+		if (*src == '%' && HEX_TO_INT(src[1]) != -1 && HEX_TO_INT(src[2]) != -1) {
+			/* handle %xx escape sequences in url e.g. %20 == ' ' */
+			c = (char)((HEX_TO_INT(src[1]) << 4) | HEX_TO_INT(src[2]));
+			src += 3;
+		} else {
+			c = *src++;
+		}
+		if (strchr(xdndescchar, c) != NULL) {
+			*dest++ = '\\';
+			i++;
+		}
+		*dest++ = c;
+		i++;
+	}
+	*dest++ = ' ';
+	*dest = '\0';
+	return i + 1;
+}
+
+void
+xdndpastedata(char *data)
+{
+	char *pastedata, *t;
+	int i = 0;
+
+	pastedata = (char *)malloc(strlen(data) * 2 + 1);
+	*pastedata = '\0';
+
+	t = strtok(data, "\n\r");
+	while(t != NULL) {
+		/* remove 'file://' prefix if it exists */
+		if (strncmp(data, "file://", 7) == 0)
+			t += 7;
+		i += xdndurldecode(t, pastedata + i);
+		t = strtok(NULL, "\n\r");
+	}
+
+	xsetsel(pastedata);
+	selpaste(0);
 }
 
 void
@@ -1326,6 +1432,26 @@ xinit(int cols, int rows)
 	XChangeProperty(xw.dpy, xw.win, xw.netwmpid, XA_CARDINAL, 32,
 			PropModeReplace, (uchar *)&thispid, 1);
 
+	/* Xdnd setup */
+	xw.XdndTypeList = XInternAtom(xw.dpy, "XdndTypeList", 0);
+	xw.XdndSelection = XInternAtom(xw.dpy, "XdndSelection", 0);
+	xw.XdndEnter = XInternAtom(xw.dpy, "XdndEnter", 0);
+	xw.XdndPosition = XInternAtom(xw.dpy, "XdndPosition", 0);
+	xw.XdndStatus = XInternAtom(xw.dpy, "XdndStatus", 0);
+	xw.XdndLeave = XInternAtom(xw.dpy, "XdndLeave", 0);
+	xw.XdndDrop = XInternAtom(xw.dpy, "XdndDrop", 0);
+	xw.XdndFinished = XInternAtom(xw.dpy, "XdndFinished", 0);
+	xw.XdndActionCopy = XInternAtom(xw.dpy, "XdndActionCopy", 0);
+	xw.XdndActionMove = XInternAtom(xw.dpy, "XdndActionMove", 0);
+	xw.XdndActionLink = XInternAtom(xw.dpy, "XdndActionLink", 0);
+	xw.XdndActionAsk = XInternAtom(xw.dpy, "XdndActionAsk", 0);
+	xw.XdndActionPrivate = XInternAtom(xw.dpy, "XdndActionPrivate", 0);
+	xw.XtextUriList = XInternAtom((Display*) xw.dpy, "text/uri-list", 0);
+	xw.XtextPlain = XInternAtom((Display*) xw.dpy, "text/plain", 0);
+	xw.XdndAware = XInternAtom(xw.dpy, "XdndAware", 0);
+	XChangeProperty(xw.dpy, xw.win, xw.XdndAware, 4, 32, PropModeReplace,
+			&XdndVersion, 1);
+
 	win.mode = MODE_NUMLOCK;
 	resettitle();
 	xhints();
@@ -1481,7 +1607,7 @@ xmakeglyphfontspecs(XftGlyphFontSpec *specs, const Glyph *glyphs, int len, int x
 }
 
 void
-xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, int y)
+xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, int y, int dmode)
 {
 	int charlen = len * ((base.mode & ATTR_WIDE) ? 2 : 1);
 	int winx = borderpx + x * win.cw, winy = borderpx + y * win.ch,
@@ -1568,51 +1694,45 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
 	if (base.mode & ATTR_INVISIBLE)
 		fg = bg;
 
-	/* Intelligent cleaning up of the borders. */
-	if (x == 0) {
-		xclear(0, (y == 0)? 0 : winy, borderpx,
-			winy + win.ch +
-			((winy + win.ch >= borderpx + win.th)? win.h : 0));
-	}
-	if (winx + width >= borderpx + win.tw) {
-		xclear(winx + width, (y == 0)? 0 : winy, win.w,
-			((winy + win.ch >= borderpx + win.th)? win.h : (winy + win.ch)));
-	}
-	if (y == 0)
-		xclear(winx, 0, winx + width, borderpx);
-	if (winy + win.ch >= borderpx + win.th)
-		xclear(winx, winy + win.ch, winx + width, win.h);
+    if (dmode & DRAW_BG) {
+        /* Intelligent cleaning up of the borders. */
+        if (x == 0) {
+            xclear(0, (y == 0)? 0 : winy, borderpx,
+                   winy + win.ch +
+                   ((winy + win.ch >= borderpx + win.th)? win.h : 0));
+        }
+        if (winx + width >= borderpx + win.tw) {
+            xclear(winx + width, (y == 0)? 0 : winy, win.w,
+                   ((winy + win.ch >= borderpx + win.th)? win.h : (winy + win.ch)));
+        }
+        if (y == 0)
+            xclear(winx, 0, winx + width, borderpx);
+        if (winy + win.ch >= borderpx + win.th)
+            xclear(winx, winy + win.ch, winx + width, win.h);
+        /* Fill the background */
+        XftDrawRect(xw.draw, bg, winx, winy, width, win.ch);
+    }
 
-	/* Clean up the region we want to draw to. */
-	XftDrawRect(xw.draw, bg, winx, winy, width, win.ch);
 
-	/* Set the clip region because Xft is sometimes dirty. */
-	r.x = 0;
-	r.y = 0;
-	r.height = win.ch;
-	r.width = width;
-	XftDrawSetClipRectangles(xw.draw, winx, winy, &r, 1);
+    if (dmode & DRAW_FG) {
+		if (base.mode & ATTR_BOXDRAW) {
+			drawboxes(winx, winy, width / len, win.ch, fg, bg, specs, len);
+		} else {
+			/* Render the glyphs. */
+			XftDrawGlyphFontSpec(xw.draw, fg, specs, len);
+		}
 
-	if (base.mode & ATTR_BOXDRAW) {
-		drawboxes(winx, winy, width / len, win.ch, fg, bg, specs, len);
-	} else {
-		/* Render the glyphs. */
-		XftDrawGlyphFontSpec(xw.draw, fg, specs, len);
-	}
+        /* Render underline and strikethrough. */
+        if (base.mode & ATTR_UNDERLINE) {
+            XftDrawRect(xw.draw, fg, winx, winy + dc.font.ascent + 1,
+                        width, 1);
+        }
 
-	/* Render underline and strikethrough. */
-	if (base.mode & ATTR_UNDERLINE) {
-		XftDrawRect(xw.draw, fg, winx, winy + dc.font.ascent * chscale + 1,
-				width, 1);
-	}
-
-	if (base.mode & ATTR_STRUCK) {
-		XftDrawRect(xw.draw, fg, winx, winy + 2 * dc.font.ascent * chscale / 3,
-				width, 1);
-	}
-
-	/* Reset clip to none. */
-	XftDrawSetClip(xw.draw, 0);
+        if (base.mode & ATTR_STRUCK) {
+            XftDrawRect(xw.draw, fg, winx, winy + 2 * dc.font.ascent / 3,
+                        width, 1);
+        }
+    }
 }
 
 void
@@ -1622,7 +1742,7 @@ xdrawglyph(Glyph g, int x, int y)
 	XftGlyphFontSpec spec;
 
 	numspecs = xmakeglyphfontspecs(&spec, &g, 1, x, y);
-	xdrawglyphfontspecs(&spec, g, numspecs, x, y);
+	xdrawglyphfontspecs(&spec, g, numspecs, x, y, DRAW_BG | DRAW_FG);
 }
 
 void
@@ -1774,32 +1894,39 @@ xstartdraw(void)
 void
 xdrawline(Line line, int x1, int y1, int x2)
 {
-	int i, x, ox, numspecs;
+	int i, x, ox, numspecs, numspecs_cached;
 	Glyph base, new;
-	XftGlyphFontSpec *specs = xw.specbuf;
+	XftGlyphFontSpec *specs;
 
-	numspecs = xmakeglyphfontspecs(specs, &line[x1], x2 - x1, x1, y1);
-	i = ox = 0;
-	for (x = x1; x < x2 && i < numspecs; x++) {
-		new = line[x];
-		if (new.mode == ATTR_WDUMMY)
-			continue;
-		if (selected(x, y1))
-			new.mode ^= ATTR_REVERSE;
-		if (i > 0 && ATTRCMP(base, new)) {
-			xdrawglyphfontspecs(specs, base, i, ox, y1);
-			specs += i;
-			numspecs -= i;
-			i = 0;
+	numspecs_cached = xmakeglyphfontspecs(xw.specbuf, &line[x1], x2 - x1, x1, y1);
+
+	/* Draw line in 2 passes: background and foreground. This way wide glyphs
+       won't get truncated (#223) */
+	for (int dmode = DRAW_BG; dmode <= DRAW_FG; dmode <<= 1) {
+		specs = xw.specbuf;
+		numspecs = numspecs_cached;
+		i = ox = 0;
+		for (x = x1; x < x2 && i < numspecs; x++) {
+			new = line[x];
+			if (new.mode == ATTR_WDUMMY)
+				continue;
+			if (selected(x, y1))
+				new.mode ^= ATTR_REVERSE;
+			if (i > 0 && ATTRCMP(base, new)) {
+				xdrawglyphfontspecs(specs, base, i, ox, y1, dmode);
+				specs += i;
+				numspecs -= i;
+				i = 0;
+			}
+			if (i == 0) {
+				ox = x;
+				base = new;
+			}
+			i++;
 		}
-		if (i == 0) {
-			ox = x;
-			base = new;
-		}
-		i++;
+		if (i > 0)
+			xdrawglyphfontspecs(specs, base, i, ox, y1, dmode);
 	}
-	if (i > 0)
-		xdrawglyphfontspecs(specs, base, i, ox, y1);
 }
 
 void
@@ -2025,6 +2152,132 @@ cmessage(XEvent *e)
 	} else if (e->xclient.data.l[0] == xw.wmdeletewin) {
 		ttyhangup();
 		exit(0);
+	} else if (e->xclient.message_type == xw.XdndEnter) {
+		xw.XdndSourceWin = e->xclient.data.l[0];
+		xw.XdndSourceVersion = e->xclient.data.l[1] >> 24;
+		xw.XdndSourceFormat = None;
+		if (xw.XdndSourceVersion > 5)
+			return;
+		xdndenter(e);
+	} else if (e->xclient.message_type == xw.XdndPosition
+			&& xw.XdndSourceVersion <= 5) {
+		xdndpos(e);
+	} else if (e->xclient.message_type == xw.XdndDrop
+			&& xw.XdndSourceVersion <= 5) {
+		xdnddrop(e);
+	}
+}
+
+void
+xdndenter(XEvent *e)
+{
+	unsigned long count;
+	Atom* formats;
+	Atom real_formats[6];
+	Bool list;
+	Atom actualType;
+	int32_t actualFormat;
+	unsigned long bytesAfter;
+	unsigned long i;
+
+	list = e->xclient.data.l[1] & 1;
+
+	if (list) {
+		XGetWindowProperty((Display*) xw.dpy,
+			xw.XdndSourceWin,
+			xw.XdndTypeList,
+			0,
+			LONG_MAX,
+			False,
+			4,
+			&actualType,
+			&actualFormat,
+			&count,
+			&bytesAfter,
+			(unsigned char**) &formats);
+	} else {
+		count = 0;
+
+		if (e->xclient.data.l[2] != None)
+			real_formats[count++] = e->xclient.data.l[2];
+		if (e->xclient.data.l[3] != None)
+			real_formats[count++] = e->xclient.data.l[3];
+		if (e->xclient.data.l[4] != None)
+			real_formats[count++] = e->xclient.data.l[4];
+
+		formats = real_formats;
+	}
+
+	for (i = 0; i < count; i++) {
+		if (formats[i] == xw.XtextUriList || formats[i] == xw.XtextPlain) {
+			xw.XdndSourceFormat = formats[i];
+			break;
+		}
+	}
+
+	if (list)
+		XFree(formats);
+}
+
+void
+xdndpos(XEvent *e)
+{
+	const int32_t xabs = (e->xclient.data.l[2] >> 16) & 0xffff;
+	const int32_t yabs = (e->xclient.data.l[2]) & 0xffff;
+	Window dummy;
+	int32_t xpos, ypos;
+	XEvent reply = { ClientMessage };
+
+	reply.xclient.window = xw.XdndSourceWin;
+	reply.xclient.format = 32;
+	reply.xclient.data.l[0] = (long) xw.win;
+	reply.xclient.data.l[2] = 0;
+	reply.xclient.data.l[3] = 0;
+
+	XTranslateCoordinates((Display*) xw.dpy,
+		XDefaultRootWindow((Display*) xw.dpy),
+		(Window) xw.win,
+		xabs, yabs,
+		&xpos, &ypos,
+		&dummy);
+
+	reply.xclient.message_type = xw.XdndStatus;
+
+	if (xw.XdndSourceFormat) {
+		reply.xclient.data.l[1] = 1;
+		if (xw.XdndSourceVersion >= 2)
+			reply.xclient.data.l[4] = xw.XdndActionCopy;
+	}
+
+	XSendEvent((Display*) xw.dpy, xw.XdndSourceWin, False, NoEventMask,
+			&reply);
+	XFlush((Display*) xw.dpy);
+}
+
+void
+xdnddrop(XEvent *e)
+{
+	Time time = CurrentTime;
+	XEvent reply = { ClientMessage };
+
+	reply.xclient.window = xw.XdndSourceWin;
+	reply.xclient.format = 32;
+	reply.xclient.data.l[0] = (long) xw.win;
+	reply.xclient.data.l[2] = 0;
+	reply.xclient.data.l[3] = 0;
+
+	if (xw.XdndSourceFormat) {
+		if (xw.XdndSourceVersion >= 1)
+			time = e->xclient.data.l[2];
+
+		XConvertSelection((Display*) xw.dpy, xw.XdndSelection,
+				xw.XdndSourceFormat, xw.XdndSelection, (Window) xw.win, time);
+	} else if (xw.XdndSourceVersion >= 2) {
+		reply.xclient.message_type = xw.XdndFinished;
+
+		XSendEvent((Display*) xw.dpy, xw.XdndSourceWin,
+				False, NoEventMask, &reply);
+		XFlush((Display*) xw.dpy);
 	}
 }
 

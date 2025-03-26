@@ -15,8 +15,11 @@
 + boxdraw
 + charoffsets
 + clipboard
++ columnredraw
++ drag n drop
 + dynamic cursor color
 + font2
++ glyph wide support (on top of boxdraw)
 + gruvbox-dark
 + nano shortcuts support
 + nobadweight
