@@ -11,7 +11,6 @@
 
 ## patches
 
-+ bold is not bright
 + boxdraw
 + charoffsets
 + clipboard
