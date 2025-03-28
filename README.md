@@ -18,11 +18,11 @@
 + drag n drop
 + dynamic cursor color
 + font2
-+ glyph wide support (on top of boxdraw)
++ glyph wide support
 + gruvbox
 + nano shortcuts support
 + nobadweight
-+ scrollback (w/ mouse patch)
++ scrollback (w/ mouse-increment patch)
 + workingdir
 
 ## install
